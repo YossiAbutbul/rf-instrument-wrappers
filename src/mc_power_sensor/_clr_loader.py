@@ -66,10 +66,22 @@ def load_usb_pm():
     if dll_dir not in sys.path:
         sys.path.append(dll_dir)
 
+    # Primary: normal AddReference. Fallback: byte-load to bypass
+    # Windows Mark-of-the-Web / OneDrive "remote" load blocks
+    # (System.NotSupportedException / FileLoadException 0x80131515).
     try:
         clr.AddReference(_DLL_NAME)
-    except Exception as exc:  # broad: pythonnet raises .NET exceptions
-        raise DLLLoadError(f"Failed to load {dll_path}: {exc}") from exc
+    except Exception as first_exc:
+        try:
+            from System.Reflection import Assembly  # type: ignore[import-not-found]
+            data = dll_path.read_bytes()
+            Assembly.Load(data)
+        except Exception as exc:
+            raise DLLLoadError(
+                f"Failed to load {dll_path}: {exc}\n"
+                "If this is a Mark-of-the-Web block, run in PowerShell:\n"
+                f"  Unblock-File '{dll_path}'"
+            ) from exc
 
     try:
         from mcl_pm_NET45 import usb_pm  # type: ignore[import-not-found]
