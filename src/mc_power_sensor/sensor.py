@@ -40,7 +40,19 @@ def _out_value(result: Any) -> Any:
 
 
 class PowerSensor:
-    """High-level interface to a Mini-Circuits USB power sensor."""
+    """High-level interface to a Mini-Circuits USB power sensor.
+
+    Usage::
+
+        with PowerSensor() as sensor:
+            sensor.connect()
+            print(sensor.model_name, sensor.serial_number)
+            print(f"{sensor.read_power():.2f} dBm")
+
+    Connect to a specific unit by serial number::
+
+        sensor.connect(serial="11501120012")
+    """
 
     def __init__(self) -> None:
         self._usb_pm_cls = load_usb_pm()
@@ -60,6 +72,23 @@ class PowerSensor:
     # ------------------------------------------------------------------
     # connection
     # ------------------------------------------------------------------
+    @classmethod
+    def list_available(cls) -> list[str]:
+        """Return serial numbers of all connected sensors.
+
+        Example::
+
+            sns = PowerSensor.list_available()
+            # ['11501120012', '11501130034']
+        """
+        usb_pm_cls = load_usb_pm()
+        dev = usb_pm_cls()
+        raw = dev.Get_Available_SN_List("")
+        sn_str = str(_out_value(raw) if isinstance(raw, tuple) else raw).strip()
+        if not sn_str:
+            return []
+        return [s.strip("[]") for s in sn_str.split() if s.strip("[]")]
+
     def connect(self, serial: Optional[str] = None) -> None:
         """Open the sensor. If ``serial`` is given, match that specific unit."""
         if self._connected:
@@ -68,13 +97,18 @@ class PowerSensor:
         if serial:
             result = self._dev.Connect_By_SN(serial)
         else:
-            result = self._dev.Open_Sensor()
+            result = self._dev.Open_Sensor("")
 
-        status = _unwrap(result)
-        if not int(status):
+        status = int(_unwrap(result))
+        if status == 0:
             raise ConnectionFailedError(
                 f"Failed to open sensor (serial={serial!r}). "
                 "Check USB connection and driver installation."
+            )
+        if status == 3:
+            raise ConnectionFailedError(
+                f"Serial number {serial!r} not found. "
+                f"Call PowerSensor.list_available() to see connected sensors."
             )
         self._connected = True
 
@@ -103,45 +137,50 @@ class PowerSensor:
 
     @property
     def firmware_version(self) -> str:
-        """Firmware version as 'major.minor' (decoded from Int64)."""
+        """Firmware version number."""
         self._require_connected()
         raw = _unwrap(self._dev.GetFirmwareVer(0))
         return str(int(raw))
-
-    @property
-    def calibration_date(self) -> str:
-        """Best-effort calibration date; returns 'N/A' if DLL lacks the call."""
-        self._require_connected()
-        for name in ("GetCalDate", "GetDeviceCalDate", "CalDate", "Get_Cal_Date"):
-            fn = getattr(self._dev, name, None)
-            if fn is None:
-                continue
-            for args in ((), ("",), (0,)):
-                try:
-                    raw = fn(*args)
-                except TypeError:
-                    continue
-                val = _out_value(raw) if isinstance(raw, tuple) and len(raw) >= 2 else _unwrap(raw)
-                return str(val)
-        return "N/A"
 
     # ------------------------------------------------------------------
     # measurement
     # ------------------------------------------------------------------
     def read_power(self, unit: PowerUnit = "dBm") -> float:
-        """Read instantaneous power in dBm (default) or mW."""
+        """Read power (averaged, higher accuracy).
+
+        Args:
+            unit: ``'dBm'`` (default) or ``'mW'``.
+
+        Returns:
+            Power reading in the requested unit.
+        """
         self._require_connected()
         if unit not in ("dBm", "mW"):
             raise InvalidParameterError(f"unit must be 'dBm' or 'mW', got {unit!r}")
-        # Format_mw is a settable property on usb_pm: True -> mW, False -> dBm
         self._dev.Format_mw = (unit == "mW")
         return float(_unwrap(self._dev.ReadPower()))
 
+    def read_immediate_power(self, unit: PowerUnit = "dBm") -> float:
+        """Read power with faster response but reduced accuracy.
+
+        Useful for fast sweeps or monitoring where ±0.5 dB is acceptable.
+        """
+        self._require_connected()
+        if unit not in ("dBm", "mW"):
+            raise InvalidParameterError(f"unit must be 'dBm' or 'mW', got {unit!r}")
+        self._dev.Format_mw = (unit == "mW")
+        return float(_unwrap(self._dev.ReadImmediatePower()))
+
     @property
     def frequency_mhz(self) -> float:
-        """Calibration frequency in MHz."""
+        """Calibration frequency in MHz.
+
+        Tells the sensor which correction factor to apply from its internal
+        cal table. Does NOT filter — the sensor always measures total broadband
+        power across its full operating range (9 kHz – 4 GHz).
+        """
         self._require_connected()
-        return float(_unwrap(self._dev.Freq))
+        return float(self._dev.Freq)
 
     @frequency_mhz.setter
     def frequency_mhz(self, value: float) -> None:
@@ -151,12 +190,6 @@ class PowerSensor:
                 f"frequency_mhz must be in [{_FREQ_MIN_MHZ}, {_FREQ_MAX_MHZ}] "
                 f"MHz, got {value}"
             )
-        # DLL may expose setter as property `Freq` or method `SetFreq`/`SetFrequency`
-        for name in ("SetFreq", "SetFrequency", "Set_Freq"):
-            fn = getattr(self._dev, name, None)
-            if fn is not None:
-                fn(float(value))
-                return
         self._dev.Freq = float(value)
 
     # ------------------------------------------------------------------
@@ -164,8 +197,9 @@ class PowerSensor:
     # ------------------------------------------------------------------
     @property
     def averaging_enabled(self) -> bool:
+        """Toggle hardware averaging (reduces noise, increases latency)."""
         self._require_connected()
-        return bool(_unwrap(self._dev.AVG))
+        return bool(self._dev.AVG)
 
     @averaging_enabled.setter
     def averaging_enabled(self, value: bool) -> None:
@@ -174,8 +208,9 @@ class PowerSensor:
 
     @property
     def average_count(self) -> int:
+        """Number of samples per averaged reading."""
         self._require_connected()
-        return int(_unwrap(self._dev.AvgCount))
+        return int(self._dev.AvgCount)
 
     @average_count.setter
     def average_count(self, value: int) -> None:
@@ -191,18 +226,18 @@ class PowerSensor:
     def temperature_c(self) -> float:
         """Sensor die temperature in degrees Celsius."""
         self._require_connected()
-        return float(_unwrap(self._dev.GetSensorTemperature()))
+        return float(_unwrap(self._dev.GetDeviceTemperature("C")))
 
     @property
     def measurement_mode(self) -> int:
-        """Measurement mode (see Mini-Circuits programming manual)."""
+        """0 = low-noise mode, 1 = fast-sampling mode."""
         self._require_connected()
         return int(_unwrap(self._dev.GetMeasurementMode()))
 
     @measurement_mode.setter
     def measurement_mode(self, value: int) -> None:
         self._require_connected()
-        self._dev.SetMeasurementMode(int(value))
+        self._dev.SetFasterMode(int(value))
 
     # ------------------------------------------------------------------
     # internals
