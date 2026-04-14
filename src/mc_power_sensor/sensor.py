@@ -158,8 +158,8 @@ class PowerSensor:
         self._require_connected()
         if unit not in ("dBm", "mW"):
             raise InvalidParameterError(f"unit must be 'dBm' or 'mW', got {unit!r}")
-        self._dev.Format_mw = (unit == "mW")
-        return float(_unwrap(self._dev.ReadPower()))
+        dbm = float(_unwrap(self._dev.ReadPower()))
+        return 10 ** (dbm / 10) if unit == "mW" else dbm
 
     def read_immediate_power(self, unit: PowerUnit = "dBm") -> float:
         """Read power with faster response but reduced accuracy.
@@ -169,8 +169,8 @@ class PowerSensor:
         self._require_connected()
         if unit not in ("dBm", "mW"):
             raise InvalidParameterError(f"unit must be 'dBm' or 'mW', got {unit!r}")
-        self._dev.Format_mw = (unit == "mW")
-        return float(_unwrap(self._dev.ReadImmediatePower()))
+        dbm = float(_unwrap(self._dev.ReadImmediatePower()))
+        return 10 ** (dbm / 10) if unit == "mW" else dbm
 
     @property
     def frequency_mhz(self) -> float:
