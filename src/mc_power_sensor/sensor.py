@@ -103,13 +103,27 @@ class PowerSensor:
 
     @property
     def firmware_version(self) -> str:
+        """Firmware version as 'major.minor' (decoded from Int64)."""
         self._require_connected()
-        return str(_unwrap(self._dev.GetFirmware()))
+        raw = _unwrap(self._dev.GetFirmwareVer(0))
+        return str(int(raw))
 
     @property
     def calibration_date(self) -> str:
+        """Best-effort calibration date; returns 'N/A' if DLL lacks the call."""
         self._require_connected()
-        return str(_unwrap(self._dev.GetDeviceCalDate()))
+        for name in ("GetCalDate", "GetDeviceCalDate", "CalDate", "Get_Cal_Date"):
+            fn = getattr(self._dev, name, None)
+            if fn is None:
+                continue
+            for args in ((), ("",), (0,)):
+                try:
+                    raw = fn(*args)
+                except TypeError:
+                    continue
+                val = _out_value(raw) if isinstance(raw, tuple) and len(raw) >= 2 else _unwrap(raw)
+                return str(val)
+        return "N/A"
 
     # ------------------------------------------------------------------
     # measurement
@@ -137,7 +151,13 @@ class PowerSensor:
                 f"frequency_mhz must be in [{_FREQ_MIN_MHZ}, {_FREQ_MAX_MHZ}] "
                 f"MHz, got {value}"
             )
-        self._dev.SetFrequency(float(value))
+        # DLL may expose setter as property `Freq` or method `SetFreq`/`SetFrequency`
+        for name in ("SetFreq", "SetFrequency", "Set_Freq"):
+            fn = getattr(self._dev, name, None)
+            if fn is not None:
+                fn(float(value))
+                return
+        self._dev.Freq = float(value)
 
     # ------------------------------------------------------------------
     # averaging

@@ -15,15 +15,10 @@ def main() -> None:
     with PowerSensor() as sensor:
         sensor.connect()
 
-        print(f"Model:       {sensor.model_name}")
-        print(f"Serial:      {sensor.serial_number}")
-        print(f"Firmware:    {sensor.firmware_version}")
-        print(f"Cal date:    {sensor.calibration_date}")
-        print(f"Temperature: {sensor.temperature_c:.1f} C")
+        print(f"Model:  {sensor.model_name}")
+        print(f"Serial: {sensor.serial_number}")
 
-        sensor.frequency_mhz = 1000.0
-        sensor.averaging_enabled = True
-        sensor.average_count = 16
+        sensor.frequency_mhz = 908.7
 
         print("\nReading power @ 1 GHz (Ctrl+C to stop):")
         try:
