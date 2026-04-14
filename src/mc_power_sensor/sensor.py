@@ -1,0 +1,174 @@
+"""Pythonic wrapper around the Mini-Circuits `usb_pm` .NET class.
+
+Target device family: Mini-Circuits USB smart power sensors
+(e.g. PWR-SEN-4GHS, PWR-6GHS). Communicates through `mcl_pm_NET45.dll`
+loaded via pythonnet.
+"""
+
+from __future__ import annotations
+
+from typing import Literal, Optional
+
+from ._clr_loader import load_usb_pm
+from .exceptions import (
+    ConnectionFailedError,
+    InvalidParameterError,
+    NotConnectedError,
+)
+
+_FREQ_MIN_MHZ = 0.009      # 9 kHz
+_FREQ_MAX_MHZ = 4000.0     # 4 GHz (PWR-SEN-4GHS upper limit)
+
+PowerUnit = Literal["dBm", "mW"]
+
+
+class PowerSensor:
+    """High-level interface to a Mini-Circuits USB power sensor."""
+
+    def __init__(self) -> None:
+        self._usb_pm_cls = load_usb_pm()
+        self._dev = self._usb_pm_cls()
+        self._connected = False
+
+    # ------------------------------------------------------------------
+    # context manager
+    # ------------------------------------------------------------------
+    def __enter__(self) -> "PowerSensor":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        if self._connected:
+            self.disconnect()
+
+    # ------------------------------------------------------------------
+    # connection
+    # ------------------------------------------------------------------
+    def connect(self, serial: Optional[str] = None) -> None:
+        """Open the sensor. If ``serial`` is given, match that specific unit."""
+        if self._connected:
+            return
+
+        if serial:
+            result = self._dev.Connect_By_SN(serial)
+        else:
+            result = self._dev.Open_Sensor()
+
+        if not int(result):
+            raise ConnectionFailedError(
+                f"Failed to open sensor (serial={serial!r}). "
+                "Check USB connection and driver installation."
+            )
+        self._connected = True
+
+    def disconnect(self) -> None:
+        if not self._connected:
+            return
+        self._dev.Close_Sensor()
+        self._connected = False
+
+    @property
+    def is_connected(self) -> bool:
+        return self._connected
+
+    # ------------------------------------------------------------------
+    # identity
+    # ------------------------------------------------------------------
+    @property
+    def model_name(self) -> str:
+        self._require_connected()
+        return str(self._dev.GetSensorModelName())
+
+    @property
+    def serial_number(self) -> str:
+        self._require_connected()
+        return str(self._dev.GetSensorSN())
+
+    @property
+    def firmware_version(self) -> str:
+        self._require_connected()
+        return str(self._dev.GetFirmware())
+
+    @property
+    def calibration_date(self) -> str:
+        self._require_connected()
+        return str(self._dev.GetDeviceCalDate())
+
+    # ------------------------------------------------------------------
+    # measurement
+    # ------------------------------------------------------------------
+    def read_power(self, unit: PowerUnit = "dBm") -> float:
+        """Read instantaneous power in dBm (default) or mW."""
+        self._require_connected()
+        if unit not in ("dBm", "mW"):
+            raise InvalidParameterError(f"unit must be 'dBm' or 'mW', got {unit!r}")
+        # Format_mw is a settable property on usb_pm: True -> mW, False -> dBm
+        self._dev.Format_mw = (unit == "mW")
+        return float(self._dev.ReadPower())
+
+    @property
+    def frequency_mhz(self) -> float:
+        """Calibration frequency in MHz."""
+        self._require_connected()
+        return float(self._dev.Freq)
+
+    @frequency_mhz.setter
+    def frequency_mhz(self, value: float) -> None:
+        self._require_connected()
+        if not (_FREQ_MIN_MHZ <= value <= _FREQ_MAX_MHZ):
+            raise InvalidParameterError(
+                f"frequency_mhz must be in [{_FREQ_MIN_MHZ}, {_FREQ_MAX_MHZ}] "
+                f"MHz, got {value}"
+            )
+        self._dev.SetFrequency(float(value))
+
+    # ------------------------------------------------------------------
+    # averaging
+    # ------------------------------------------------------------------
+    @property
+    def averaging_enabled(self) -> bool:
+        self._require_connected()
+        return bool(self._dev.AVG)
+
+    @averaging_enabled.setter
+    def averaging_enabled(self, value: bool) -> None:
+        self._require_connected()
+        self._dev.AVG = bool(value)
+
+    @property
+    def average_count(self) -> int:
+        self._require_connected()
+        return int(self._dev.AvgCount)
+
+    @average_count.setter
+    def average_count(self, value: int) -> None:
+        self._require_connected()
+        if value < 1:
+            raise InvalidParameterError("average_count must be >= 1")
+        self._dev.AvgCount = int(value)
+
+    # ------------------------------------------------------------------
+    # misc
+    # ------------------------------------------------------------------
+    @property
+    def temperature_c(self) -> float:
+        """Sensor die temperature in degrees Celsius."""
+        self._require_connected()
+        return float(self._dev.GetSensorTemperature())
+
+    @property
+    def measurement_mode(self) -> int:
+        """Measurement mode (see Mini-Circuits programming manual)."""
+        self._require_connected()
+        return int(self._dev.GetMeasurementMode())
+
+    @measurement_mode.setter
+    def measurement_mode(self, value: int) -> None:
+        self._require_connected()
+        self._dev.SetMeasurementMode(int(value))
+
+    # ------------------------------------------------------------------
+    # internals
+    # ------------------------------------------------------------------
+    def _require_connected(self) -> None:
+        if not self._connected:
+            raise NotConnectedError("Call connect() before using the sensor.")

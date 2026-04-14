@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mc-power-sensor"
+version = "0.1.0"
+description = "Python wrapper for Mini-Circuits USB smart power sensors (PWR-SEN-4GHS and family) via mcl_pm_NET45.dll"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Arad Technologies" }]
+keywords = ["mini-circuits", "rf", "power-sensor", "pwr-sen-4ghs", "usb", "instrumentation"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: Microsoft :: Windows",
+    "Topic :: Scientific/Engineering",
+]
+dependencies = [
+    "pythonnet>=3.0.3",
+]
+
+[project.urls]
+"Mini-Circuits Power Meters" = "https://www.minicircuits.com/softwaredownload/pm.html"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-dir]
+"" = "src"
