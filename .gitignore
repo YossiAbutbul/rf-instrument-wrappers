@@ -24,6 +24,9 @@ env/
 .DS_Store
 Thumbs.db
 
+# Claude Code worktrees / session data
+.claude/
+
 # Mini-Circuits DLL (user-provided, not redistributed)
 dll/*.dll
 dll/*.pdb
