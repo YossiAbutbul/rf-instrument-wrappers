@@ -108,7 +108,7 @@ with PowerSensor() as sensor:
     sensor.connect()
 
     print(f"Model:   {sensor.model_name}")    # PWR-SEN-4GHS
-    print(f"Serial:  {sensor.serial_number}") # 11501120012
+    print(f"Serial:  {sensor.serial_number}") # <serial_number>
     print(f"Power:   {sensor.read_power():.2f} dBm")
 ```
 
@@ -123,11 +123,11 @@ with PowerSensor() as sensor:
 sensor.connect()
 
 # Connect to a specific sensor by serial number
-sensor.connect(serial="11501120012")
+sensor.connect(serial="<serial_number>")
 
 # List serial numbers of all connected sensors
 serials = PowerSensor.list_available()
-# → ['11501120012']
+# → ['<serial_number>']
 
 # Disconnect manually (or use context manager — preferred)
 sensor.disconnect()
@@ -184,7 +184,7 @@ print(sensor.measurement_mode)  # returns last set value
 
 ```python
 print(sensor.model_name)        # 'PWR-SEN-4GHS'
-print(sensor.serial_number)     # '11501120012'
+print(sensor.serial_number)     # '<serial_number>'
 print(sensor.firmware_version)  # firmware build number
 print(sensor.temperature_c)     # sensor die temperature in °C
 ```
