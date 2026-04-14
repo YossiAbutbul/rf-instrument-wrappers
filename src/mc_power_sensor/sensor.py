@@ -58,6 +58,7 @@ class PowerSensor:
         self._usb_pm_cls = load_usb_pm()
         self._dev = self._usb_pm_cls()
         self._connected = False
+        self._measurement_mode = 0  # DLL has no getter; track locally
 
     # ------------------------------------------------------------------
     # context manager
@@ -230,14 +231,17 @@ class PowerSensor:
 
     @property
     def measurement_mode(self) -> int:
-        """0 = low-noise mode, 1 = fast-sampling mode."""
-        self._require_connected()
-        return int(_unwrap(self._dev.GetMeasurementMode()))
+        """0 = low-noise mode, 1 = fast-sampling mode.
+
+        DLL has no getter — returns last value set (defaults to 0).
+        """
+        return self._measurement_mode
 
     @measurement_mode.setter
     def measurement_mode(self, value: int) -> None:
         self._require_connected()
         self._dev.SetFasterMode(int(value))
+        self._measurement_mode = int(value)
 
     # ------------------------------------------------------------------
     # internals
