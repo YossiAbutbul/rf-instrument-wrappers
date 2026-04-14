@@ -7,7 +7,7 @@ loaded via pythonnet.
 
 from __future__ import annotations
 
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from ._clr_loader import load_usb_pm
 from .exceptions import (
@@ -20,6 +20,23 @@ _FREQ_MIN_MHZ = 0.009      # 9 kHz
 _FREQ_MAX_MHZ = 4000.0     # 4 GHz (PWR-SEN-4GHS upper limit)
 
 PowerUnit = Literal["dBm", "mW"]
+
+
+def _unwrap(result: Any) -> Any:
+    """pythonnet turns .NET `ref`/`out` parameters into extra tuple items.
+
+    Return the first element when that happens; otherwise the value itself.
+    """
+    if isinstance(result, tuple) and result:
+        return result[0]
+    return result
+
+
+def _out_value(result: Any) -> Any:
+    """Return the first `out` value (tuple[1]) if present, else the result."""
+    if isinstance(result, tuple) and len(result) >= 2:
+        return result[1]
+    return result
 
 
 class PowerSensor:
@@ -53,7 +70,8 @@ class PowerSensor:
         else:
             result = self._dev.Open_Sensor()
 
-        if not int(result):
+        status = _unwrap(result)
+        if not int(status):
             raise ConnectionFailedError(
                 f"Failed to open sensor (serial={serial!r}). "
                 "Check USB connection and driver installation."
@@ -76,22 +94,22 @@ class PowerSensor:
     @property
     def model_name(self) -> str:
         self._require_connected()
-        return str(self._dev.GetSensorModelName())
+        return str(_unwrap(self._dev.GetSensorModelName()))
 
     @property
     def serial_number(self) -> str:
         self._require_connected()
-        return str(self._dev.GetSensorSN())
+        return str(_unwrap(self._dev.GetSensorSN()))
 
     @property
     def firmware_version(self) -> str:
         self._require_connected()
-        return str(self._dev.GetFirmware())
+        return str(_unwrap(self._dev.GetFirmware()))
 
     @property
     def calibration_date(self) -> str:
         self._require_connected()
-        return str(self._dev.GetDeviceCalDate())
+        return str(_unwrap(self._dev.GetDeviceCalDate()))
 
     # ------------------------------------------------------------------
     # measurement
@@ -103,13 +121,13 @@ class PowerSensor:
             raise InvalidParameterError(f"unit must be 'dBm' or 'mW', got {unit!r}")
         # Format_mw is a settable property on usb_pm: True -> mW, False -> dBm
         self._dev.Format_mw = (unit == "mW")
-        return float(self._dev.ReadPower())
+        return float(_unwrap(self._dev.ReadPower()))
 
     @property
     def frequency_mhz(self) -> float:
         """Calibration frequency in MHz."""
         self._require_connected()
-        return float(self._dev.Freq)
+        return float(_unwrap(self._dev.Freq))
 
     @frequency_mhz.setter
     def frequency_mhz(self, value: float) -> None:
@@ -127,7 +145,7 @@ class PowerSensor:
     @property
     def averaging_enabled(self) -> bool:
         self._require_connected()
-        return bool(self._dev.AVG)
+        return bool(_unwrap(self._dev.AVG))
 
     @averaging_enabled.setter
     def averaging_enabled(self, value: bool) -> None:
@@ -137,7 +155,7 @@ class PowerSensor:
     @property
     def average_count(self) -> int:
         self._require_connected()
-        return int(self._dev.AvgCount)
+        return int(_unwrap(self._dev.AvgCount))
 
     @average_count.setter
     def average_count(self, value: int) -> None:
@@ -153,13 +171,13 @@ class PowerSensor:
     def temperature_c(self) -> float:
         """Sensor die temperature in degrees Celsius."""
         self._require_connected()
-        return float(self._dev.GetSensorTemperature())
+        return float(_unwrap(self._dev.GetSensorTemperature()))
 
     @property
     def measurement_mode(self) -> int:
         """Measurement mode (see Mini-Circuits programming manual)."""
         self._require_connected()
-        return int(self._dev.GetMeasurementMode())
+        return int(_unwrap(self._dev.GetMeasurementMode()))
 
     @measurement_mode.setter
     def measurement_mode(self, value: int) -> None:
