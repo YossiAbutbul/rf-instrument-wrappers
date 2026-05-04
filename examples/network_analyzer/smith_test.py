@@ -21,8 +21,8 @@ def main():
         print(f"IDN : {na.idn}\n")
 
         # -- configure sweep --
-        na.start_freq_hz    = 100e6     # 100 MHz
-        na.stop_freq_hz     = 1e9       # 1 GHz
+        na.start_freq_hz    = 600e6    
+        na.stop_freq_hz     = 2.3e9    
         na.points           = 1601      # E5061B max
         na.if_bandwidth_hz  = 1000
         na.source_power_dbm = -10

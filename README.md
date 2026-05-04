@@ -187,6 +187,33 @@ Requires NI-VISA or Keysight IO Libraries Suite (recommended), or pure-Python vi
 | `get_impedance(param='S11', z0=50)` | method | `(freqs, R, X)` — Smith chart data |
 | `idn` | property | Instrument ID string |
 
+### Live Smith Chart Web Viewer
+
+A FastAPI + Plotly web app that streams S11 sweeps over WebSocket and renders a live Smith chart in the browser.
+
+```powershell
+pip install -r src/network_analyzer/requirements_server.txt
+uvicorn network_analyzer.server:app --host 0.0.0.0 --port 8766
+```
+
+Open <http://localhost:8766>.
+
+**Features:**
+- Real-time S11 trace on a Plotly Smith chart (~5 Hz refresh at default settings)
+- Hover any point → tooltip with `f`, `R`, `X`, `|Γ|`
+- Configurable trail history (0–10 past sweeps shown faded)
+- Sweep config form (start/stop/points/IFBW/power) with live Apply
+- Pause / Resume / Clear, sweep counter and rate
+- Dark theme, responsive layout
+
+**API endpoints (also driveable from n8n / scripts):**
+
+| Method | Path | Notes |
+|---|---|---|
+| GET  | `/api/config` | current sweep settings + IDN |
+| POST | `/api/config` | partial update of any sweep field |
+| WS   | `/ws/sweep` | streams `{freqs, gamma_real, gamma_imag, r, x}` per sweep |
+
 ---
 
 ## n8n Integration (Power Sensor)

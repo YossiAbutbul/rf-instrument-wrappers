@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>ENA Live Smith Chart</title>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f1115;
+      --panel: #1a1d24;
+      --panel2: #232730;
+      --border: #2d323d;
+      --text: #e6e8eb;
+      --muted: #8a909c;
+      --accent: #4f9eff;
+      --accent2: #2c7a2c;
+      --danger: #cc4444;
+    }
+    * { box-sizing: border-box; }
+    body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; margin: 0; background: var(--bg); color: var(--text); }
+    header { padding: 10px 18px; background: var(--panel); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    h1 { margin: 0; font-size: 1em; font-weight: 600; letter-spacing: .3px; }
+    h1 small { color: var(--muted); font-weight: 400; margin-left: 8px; }
+    #status { font-size: 0.8em; padding: 4px 10px; border-radius: 12px; background: #444; transition: background .2s; }
+    #status.live { background: var(--accent2); }
+    #status.paused { background: #b07d2c; }
+    #status.error { background: var(--danger); }
+    main { display: grid; grid-template-columns: 300px 1fr; gap: 14px; padding: 14px; height: calc(100vh - 51px); }
+    .panel { background: var(--panel); padding: 14px 16px; border-radius: 8px; border: 1px solid var(--border); overflow-y: auto; }
+    .panel h3 { margin: 0 0 10px; font-size: .9em; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; font-weight: 600; }
+    .field { display: grid; grid-template-columns: 1fr 90px; gap: 8px; align-items: center; margin: 6px 0; font-size: .85em; }
+    .field label { color: var(--muted); }
+    .field input { padding: 5px 8px; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 4px; font-size: .9em; }
+    .field input:focus { outline: none; border-color: var(--accent); }
+    .row { display: flex; gap: 6px; margin-top: 10px; }
+    button { flex: 1; padding: 7px 10px; background: var(--accent); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: .85em; font-weight: 500; transition: background .15s; }
+    button:hover { filter: brightness(1.15); }
+    button.secondary { background: var(--panel2); border: 1px solid var(--border); }
+    button.danger { background: var(--danger); }
+    .stats { background: var(--panel2); padding: 10px 12px; border-radius: 6px; margin-top: 12px; font-size: .8em; }
+    .stats div { display: flex; justify-content: space-between; padding: 2px 0; color: var(--muted); }
+    .stats div b { color: var(--text); font-weight: 500; font-variant-numeric: tabular-nums; }
+    #chart { background: var(--panel); border-radius: 8px; height: 100%; }
+    .chart-wrap { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+    .marker-info { background: var(--panel); padding: 8px 14px; border-radius: 6px; font-size: .82em; border: 1px solid var(--border); display: flex; gap: 24px; }
+    .marker-info span { color: var(--muted); }
+    .marker-info b { color: var(--text); font-variant-numeric: tabular-nums; margin-left: 6px; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>E5061B Live Smith Chart <small>S11 reflection</small></h1>
+  <span id="status">connecting…</span>
+</header>
+
+<main>
+  <aside class="panel">
+    <h3>Sweep config</h3>
+    <div class="field"><label>Start (MHz)</label><input id="start" type="number" step="1" /></div>
+    <div class="field"><label>Stop (MHz)</label><input id="stop" type="number" step="1" /></div>
+    <div class="field"><label>Points</label><input id="points" type="number" min="11" max="1601" /></div>
+    <div class="field"><label>IFBW (Hz)</label><input id="ifbw" type="number" min="10" max="30000" /></div>
+    <div class="field"><label>Power (dBm)</label><input id="power" type="number" step="1" /></div>
+    <div class="row"><button id="apply">Apply</button></div>
+
+    <h3 style="margin-top:18px">Display</h3>
+    <div class="field"><label>Trail length</label><input id="trail" type="number" min="0" max="10" value="3" /></div>
+    <div class="field"><label>Smoothing (ms)</label><input id="smooth" type="number" min="0" max="500" value="150" /></div>
+
+    <div class="row">
+      <button id="pause" class="secondary">⏸ Pause</button>
+      <button id="clear" class="secondary">Clear</button>
+    </div>
+
+    <div class="stats">
+      <div><span>Sweep #</span><b id="s_count">0</b></div>
+      <div><span>Sweep time</span><b id="s_time">– s</b></div>
+      <div><span>Rate</span><b id="s_rate">– Hz</b></div>
+      <div><span>|Γ| min</span><b id="s_gmin">–</b></div>
+      <div><span>|Γ| max</span><b id="s_gmax">–</b></div>
+    </div>
+    <div class="stats" id="info" style="font-size:.75em">–</div>
+  </aside>
+
+  <div class="chart-wrap">
+    <div id="chart"></div>
+    <div class="marker-info" id="marker"><span>Hover over the trace for R + jX</span></div>
+  </div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const status = $("status");
+
+// ---------- state ----------
+const state = {
+  paused: false,
+  sweepCount: 0,
+  trail: [],          // history of past sweeps {real, imag}
+  trailLen: 3,
+  smoothMs: 150,
+};
+
+// ---------- plot init ----------
+const traceColors = ["#4f9eff", "#7dbeff", "#aed6ff", "#d6eaff"];
+
+function buildTraces() {
+  const traces = [];
+  // older trails first (faded)
+  for (let i = state.trailLen; i > 0; i--) {
+    traces.push({
+      type: "scattersmith", real: [], imag: [],
+      mode: "lines", line: { width: 1, color: `rgba(120,170,230,${0.25 * (i / state.trailLen)})` },
+      hoverinfo: "skip", showlegend: false,
+    });
+  }
+  // current trace
+  traces.push({
+    type: "scattersmith", real: [], imag: [],
+    mode: "lines+markers",
+    marker: { size: 4, color: [], colorscale: "Viridis", showscale: true,
+              colorbar: { title: { text: "Freq (MHz)", font: { size: 11 } }, thickness: 12, len: 0.85 } },
+    line: { width: 2, color: "#1f6feb" },
+    customdata: [],
+    hovertemplate: "<b>f</b> = %{customdata[0]:.2f} MHz<br>" +
+                   "<b>R</b> = %{customdata[1]:.2f} Ω<br>" +
+                   "<b>X</b> = %{customdata[2]:.2f} Ω<br>" +
+                   "<b>|Γ|</b> = %{customdata[3]:.3f}<extra></extra>",
+    showlegend: false,
+  });
+  return traces;
+}
+
+const layout = {
+  paper_bgcolor: "#1a1d24",
+  plot_bgcolor:  "#1a1d24",
+  font: { color: "#e6e8eb" },
+  margin: { t: 10, b: 10, l: 10, r: 10 },
+  smith: {
+    bgcolor: "#1a1d24",
+    realaxis:      { color: "#5a6273", gridcolor: "#2d323d", tickfont: { color: "#aab0bc", size: 10 } },
+    imaginaryaxis: { color: "#5a6273", gridcolor: "#2d323d", tickfont: { color: "#aab0bc", size: 10 } }
+  },
+  transition: { duration: 150, easing: "cubic-in-out" },
+};
+
+Plotly.newPlot("chart", buildTraces(), layout, { responsive: true, displaylogo: false });
+
+// hover handler -> marker info bar
+$("chart").on("plotly_hover", (ev) => {
+  const pt = ev.points[0];
+  if (!pt || !pt.customdata) return;
+  const [f, r, x, gm] = pt.customdata;
+  $("marker").innerHTML =
+    `<span>f<b>${f.toFixed(2)} MHz</b></span>` +
+    `<span>R<b>${r.toFixed(2)} Ω</b></span>` +
+    `<span>X<b>${x >= 0 ? "+" : ""}${x.toFixed(2)} Ω</b></span>` +
+    `<span>|Γ|<b>${gm.toFixed(3)}</b></span>`;
+});
+
+// ---------- config ----------
+async function loadConfig() {
+  const c = await (await fetch("/api/config")).json();
+  $("start").value  = (c.start_freq_hz / 1e6).toFixed(0);
+  $("stop").value   = (c.stop_freq_hz  / 1e6).toFixed(0);
+  $("points").value = c.points;
+  $("ifbw").value   = c.if_bandwidth_hz;
+  $("power").value  = c.source_power_dbm;
+  $("info").textContent = c.idn;
+}
+loadConfig();
+
+$("apply").onclick = async () => {
+  const body = {
+    start_freq_hz:    +$("start").value  * 1e6,
+    stop_freq_hz:     +$("stop").value   * 1e6,
+    points:           +$("points").value,
+    if_bandwidth_hz:  +$("ifbw").value,
+    source_power_dbm: +$("power").value,
+  };
+  const r = await fetch("/api/config", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({ detail: r.statusText }));
+    alert("Config rejected:\n" + JSON.stringify(err.detail, null, 2));
+    return;
+  }
+  state.trail = [];
+};
+
+$("pause").onclick = () => {
+  state.paused = !state.paused;
+  $("pause").textContent = state.paused ? "▶ Resume" : "⏸ Pause";
+  status.textContent = state.paused ? "paused" : "● live";
+  status.className = state.paused ? "paused" : "live";
+};
+
+$("clear").onclick = () => {
+  state.trail = [];
+  Plotly.react("chart", buildTraces(), layout);
+};
+
+$("trail").oninput = e => {
+  state.trailLen = +e.target.value;
+  Plotly.react("chart", buildTraces(), layout);
+};
+
+$("smooth").oninput = e => {
+  state.smoothMs = +e.target.value;
+  layout.transition.duration = state.smoothMs;
+};
+
+// ---------- websocket ----------
+let lastTs = 0;
+const wsProto = location.protocol === "https:" ? "wss" : "ws";
+const ws = new WebSocket(`${wsProto}://${location.host}/ws/sweep`);
+
+ws.onopen  = () => { status.textContent = "● live"; status.className = "live"; };
+ws.onclose = () => { status.textContent = "disconnected"; status.className = "error"; };
+ws.onerror = () => { status.textContent = "error"; status.className = "error"; };
+
+ws.onmessage = (ev) => {
+  if (state.paused) return;
+  const d = JSON.parse(ev.data);
+  const N = d.freqs.length;
+  const freqsMHz = d.freqs.map(f => f / 1e6);
+  const gMag = d.gamma_real.map((re, i) => Math.hypot(re, d.gamma_imag[i]));
+  const customdata = freqsMHz.map((f, i) => [f, d.r[i], d.x[i], gMag[i]]);
+
+  // push current sweep onto trail
+  state.trail.push({ real: d.gamma_real, imag: d.gamma_imag });
+  if (state.trail.length > state.trailLen) state.trail.shift();
+
+  // Plotly scattersmith expects normalized impedance (z/Z0), not Γ
+  const Z0 = 50;
+  const zReal = d.r.map(v => v / Z0);
+  const zImag = d.x.map(v => v / Z0);
+
+  // store normalized z in trail too
+  state.trail[state.trail.length - 1] = { real: zReal, imag: zImag };
+
+  const traces = buildTraces();
+  for (let i = 0; i < state.trailLen; i++) {
+    const histIdx = state.trail.length - 2 - (state.trailLen - 1 - i);
+    const t = state.trail[histIdx];
+    if (t) {
+      traces[i].real = t.real;
+      traces[i].imag = t.imag;
+    }
+  }
+  const cur = traces[state.trailLen];
+  cur.real = zReal;
+  cur.imag = zImag;
+  cur.marker.color = freqsMHz;
+  cur.customdata = customdata;
+
+  Plotly.react("chart", traces, layout);
+
+  // stats
+  state.sweepCount++;
+  const now = performance.now();
+  const dt = lastTs ? (now - lastTs) / 1000 : 0;
+  lastTs = now;
+  $("s_count").textContent = state.sweepCount;
+  if (dt > 0) {
+    $("s_time").textContent = dt.toFixed(3) + " s";
+    $("s_rate").textContent = (1 / dt).toFixed(1) + " Hz";
+  }
+  $("s_gmin").textContent = Math.min(...gMag).toFixed(3);
+  $("s_gmax").textContent = Math.max(...gMag).toFixed(3);
+};
+</script>
+</body>
+</html>
