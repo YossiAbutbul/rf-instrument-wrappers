@@ -1,0 +1,86 @@
+{
+  "name": "TX Power Measurement",
+  "nodes": [
+    {
+      "id": "1",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "parameters": {}
+    },
+    {
+      "id": "2",
+      "name": "Connect Sensor",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8765/connect",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "{}"
+      }
+    },
+    {
+      "id": "3",
+      "name": "Read Power",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "http://host.docker.internal:8765/power"
+      }
+    },
+    {
+      "id": "4",
+      "name": "Format Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [900, 300],
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "power_dBm",
+              "type": "number",
+              "value": "={{ $json.value_dbm }}"
+            },
+            {
+              "id": "a2",
+              "name": "power_mW",
+              "type": "number",
+              "value": "={{ $json.value_mw }}"
+            },
+            {
+              "id": "a3",
+              "name": "timestamp",
+              "type": "string",
+              "value": "={{ $now }}"
+            }
+          ]
+        },
+        "includeOtherFields": false
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [[{ "node": "Connect Sensor", "type": "main", "index": 0 }]]
+    },
+    "Connect Sensor": {
+      "main": [[{ "node": "Read Power", "type": "main", "index": 0 }]]
+    },
+    "Read Power": {
+      "main": [[{ "node": "Format Result", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

@@ -1,14 +1,14 @@
 """Minimal end-to-end example for the PWR-SEN-4GHS sensor.
 
 Run:
-    python examples/basic_read.py
+    python examples/power_sensor/basic_read.py
 """
 
 from __future__ import annotations
 
 import time
 
-from mc_power_sensor import PowerSensor
+from power_sensor import PowerSensor
 
 
 def main() -> None:

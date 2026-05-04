@@ -3,7 +3,7 @@
 Tests every wrapper method/property and reports PASS / FAIL / SKIP.
 Run with the sensor plugged in.
 
-    python examples/validate_api.py
+    python examples/power_sensor/validate_api.py
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from __future__ import annotations
 import traceback
 from typing import Any
 
-from mc_power_sensor import PowerSensor
+from power_sensor import PowerSensor
 
 
 # ──────────────────────────────────────────────────────────────────────

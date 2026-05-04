@@ -3,21 +3,39 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "mc-power-sensor"
-version = "0.1.0"
-description = "Python wrapper for Mini-Circuits USB smart power sensors (PWR-SEN-4GHS and family) via mcl_pm_NET45.dll"
+name = "rf-instruments"
+version = "0.2.0"
+description = "Python wrappers for RF lab instruments: Mini-Circuits USB power sensors and Agilent E5061B ENA"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "Arad Technologies" }]
-keywords = ["mini-circuits", "rf", "power-sensor", "pwr-sen-4ghs", "usb", "instrumentation"]
+keywords = ["mini-circuits", "agilent", "keysight", "rf", "power-sensor", "network-analyzer", "ena", "vna", "usb", "usbtmc", "instrumentation"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: Microsoft :: Windows",
     "Topic :: Scientific/Engineering",
 ]
-dependencies = [
+dependencies = []
+
+[project.optional-dependencies]
+power_sensor = [
     "pythonnet>=3.0.3",
+]
+network_analyzer = [
+    "pyvisa>=1.14",
+    "pyvisa-py>=0.7",
+    "pyusb>=1.2",
+    "numpy>=1.23",
+]
+server = [
+    "fastapi>=0.111",
+    "uvicorn[standard]>=0.29",
+    "pydantic>=2.0",
+]
+plot = [
+    "matplotlib>=3.7",
+    "mplcursors>=0.5",
 ]
 
 [project.urls]
