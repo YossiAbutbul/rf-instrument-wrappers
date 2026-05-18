@@ -5,12 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "rf-instruments"
 version = "0.2.0"
-description = "Python wrappers for RF lab instruments: Mini-Circuits USB power sensors and Agilent E5061B ENA"
+description = "Python wrappers for RF lab instruments: Mini-Circuits USB power sensors, Agilent E5061B ENA, and Agilent N6705B DC Power Analyzer"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "Arad Technologies" }]
-keywords = ["mini-circuits", "agilent", "keysight", "rf", "power-sensor", "network-analyzer", "ena", "vna", "usb", "usbtmc", "instrumentation"]
+keywords = ["mini-circuits", "agilent", "keysight", "rf", "power-sensor", "network-analyzer", "ena", "vna", "dc-power", "n6705b", "usb", "usbtmc", "instrumentation"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: Microsoft :: Windows",
@@ -27,6 +27,11 @@ network_analyzer = [
     "pyvisa-py>=0.7",
     "pyusb>=1.2",
     "numpy>=1.23",
+]
+dc_power_analyzer = [
+    "pyvisa>=1.14",
+    "pyvisa-py>=0.7",
+    "pyusb>=1.2",
 ]
 server = [
     "fastapi>=0.111",
