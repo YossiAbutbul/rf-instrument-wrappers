@@ -13,8 +13,8 @@ Scripts and the browser-based `measure.html` app for the Agilent E5061B ENA.
 ### 2. Clone repo + venv
 
 ```powershell
-git clone https://github.com/YossiAbutbul/RF-Instruments.git
-cd RF-Instruments
+git clone https://github.com/YossiAbutbul/rf-instrument-wrappers.git
+cd rf-instrument-wrappers
 python -m venv .venv
 .venv\Scripts\activate
 ```

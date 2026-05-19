@@ -49,8 +49,8 @@ README.md
 ### 1. Clone and create a venv
 
 ```powershell
-git clone https://github.com/YossiAbutbul/RF-Instruments.git
-cd RF-Instruments
+git clone https://github.com/YossiAbutbul/rf-instrument-wrappers.git
+cd rf-instrument-wrappers
 python -m venv .venv
 .venv\Scripts\activate
 ```
