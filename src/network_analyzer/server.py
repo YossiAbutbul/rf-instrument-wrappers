@@ -48,6 +48,9 @@ async def lifespan(app: FastAPI):
         pass
 
 
+app = FastAPI(title="ENA Smith Live Viewer", lifespan=lifespan)
+
+
 # ---------------------------------------------------------------------------
 # REST: connect / disconnect / status
 # ---------------------------------------------------------------------------
@@ -80,9 +83,6 @@ async def api_disconnect():
         return {"connected": False}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Disconnect failed: {e}")
-
-
-app = FastAPI(title="ENA Smith Live Viewer", lifespan=lifespan)
 
 
 # ---------------------------------------------------------------------------
