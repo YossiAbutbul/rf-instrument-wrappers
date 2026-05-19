@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="color-scheme" content="light">
+<title>ENA Measure</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  html, body { background: #fff; color: #111; }
+  body { font-family: system-ui, sans-serif; margin: 24px; }
+  h1 { margin-top: 0; }
+  .row { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+  input, button, select { padding: 6px 10px; font-size: 14px; }
+  button { cursor: pointer; }
+  table { border-collapse: collapse; margin-top: 12px; min-width: 480px; }
+  th, td { border: 1px solid #ccc; padding: 6px 12px; text-align: right; }
+  th { background: #f0f0f0; }
+  td:first-child, th:first-child { text-align: left; }
+  .status { margin-left: 12px; color: #555; font-size: 13px; }
+  .err { color: #b00; }
+</style>
+</head>
+<body>
+
+<h1>ENA Measure (R + jX)</h1>
+
+<div class="row">
+  <button id="btn-connect">Connect</button>
+  <button id="btn-disconnect">Disconnect</button>
+  <span id="conn-state" class="status">checking...</span>
+</div>
+
+<div class="row">
+  <label>Freq:
+    <input id="freq" type="number" step="any" value="100" style="width: 120px;">
+  </label>
+  <select id="unit">
+    <option value="1">Hz</option>
+    <option value="1e3">kHz</option>
+    <option value="1e6" selected>MHz</option>
+    <option value="1e9">GHz</option>
+  </select>
+  <label>Param:
+    <select id="param">
+      <option>S11</option>
+      <option>S21</option>
+      <option>S12</option>
+      <option>S22</option>
+    </select>
+  </label>
+  <button id="btn-measure">Measure</button>
+  <button id="btn-export">Export Excel</button>
+  <button id="btn-clear">Clear</button>
+  <span id="status" class="status"></span>
+</div>
+
+<table id="tbl">
+  <thead>
+    <tr>
+      <th>Timestamp</th>
+      <th>Freq (MHz)</th>
+      <th>R (Ω)</th>
+      <th>X (Ω)</th>
+      <th>|Γ| (dB)</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<script>
+const tbody  = document.querySelector("#tbl tbody");
+const status = document.getElementById("status");
+
+function setStatus(msg, isErr) {
+  status.textContent = msg || "";
+  status.className = "status" + (isErr ? " err" : "");
+}
+
+async function measure() {
+  setStatus("Measuring...");
+  const freqVal = parseFloat(document.getElementById("freq").value);
+  const unit    = parseFloat(document.getElementById("unit").value);
+  const param   = document.getElementById("param").value;
+  if (!isFinite(freqVal) || freqVal <= 0) {
+    setStatus("Invalid frequency", true);
+    return;
+  }
+  const hz = freqVal * unit;
+
+  try {
+    const res = await fetch("/api/measure", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ frequencies_hz: [hz], parameter: param, z0: 50.0 })
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    if (!Array.isArray(data) || data.length === 0) throw new Error("Empty response");
+    const p = data[0];
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${new Date().toLocaleString()}</td>
+      <td>${(p.freq_hz / 1e6).toFixed(6)}</td>
+      <td>${p.r_ohm}</td>
+      <td>${p.x_ohm}</td>
+      <td>${p.s11_db}</td>
+    `;
+    tbody.appendChild(tr);
+    setStatus("OK");
+  } catch (e) {
+    setStatus("Error: " + e.message, true);
+  }
+}
+
+function exportExcel() {
+  const rows = [...tbody.querySelectorAll("tr")].map(tr =>
+    [...tr.children].map(td => {
+      const t = td.textContent;
+      const n = parseFloat(t);
+      return (isFinite(n) && t.trim() !== "" && !isNaN(n) && /^[-+0-9.eE ]+$/.test(t)) ? n : t;
+    })
+  );
+  if (rows.length === 0) { setStatus("Table empty", true); return; }
+
+  const header = ["Timestamp", "Freq (MHz)", "R (Ohm)", "X (Ohm)", "S11 (dB)"];
+  const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Results");
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  XLSX.writeFile(wb, `ena_measure_${stamp}.xlsx`);
+  setStatus("Exported");
+}
+
+const connState = document.getElementById("conn-state");
+
+function setConn(connected, label) {
+  connState.textContent = label;
+  connState.style.color = connected ? "#080" : "#b00";
+}
+
+async function refreshStatus() {
+  try {
+    const r = await fetch("/api/status");
+    const d = await r.json();
+    setConn(!!d.connected, d.connected ? "Connected: " + (d.idn || "") : "Disconnected");
+  } catch (e) {
+    setConn(false, "Status error: " + e.message);
+  }
+}
+
+async function connect() {
+  setStatus("Connecting...");
+  try {
+    const r = await fetch("/api/connect", { method: "POST" });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || ("HTTP " + r.status));
+    setConn(true, "Connected: " + (d.idn || ""));
+    setStatus("Connected");
+  } catch (e) {
+    setConn(false, "Disconnected");
+    setStatus("Error: " + e.message, true);
+  }
+}
+
+async function disconnect() {
+  try {
+    const r = await fetch("/api/disconnect", { method: "POST" });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      throw new Error(d.detail || ("HTTP " + r.status));
+    }
+    setConn(false, "Disconnected");
+    setStatus("Disconnected");
+  } catch (e) {
+    setStatus("Error: " + e.message, true);
+  }
+}
+
+document.getElementById("btn-measure").onclick    = measure;
+document.getElementById("btn-export").onclick     = exportExcel;
+document.getElementById("btn-clear").onclick      = () => { tbody.innerHTML = ""; setStatus(""); };
+document.getElementById("btn-connect").onclick    = connect;
+document.getElementById("btn-disconnect").onclick = disconnect;
+
+refreshStatus();
+</script>
+
+</body>
+</html>

@@ -37,9 +37,49 @@ sweep_lock = asyncio.Lock()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    na.connect()
+    try:
+        na.connect()
+    except Exception as e:
+        print(f"[startup] ENA auto-connect failed: {e}. Use /api/connect to retry.")
     yield
-    na.disconnect()
+    try:
+        na.disconnect()
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# REST: connect / disconnect / status
+# ---------------------------------------------------------------------------
+
+@app.get("/api/status")
+def get_status():
+    if not na.is_connected:
+        return {"connected": False, "idn": None}
+    try:
+        return {"connected": True, "idn": na.idn}
+    except Exception as e:
+        return {"connected": False, "idn": None, "error": str(e)}
+
+
+@app.post("/api/connect")
+async def api_connect():
+    if na.is_connected:
+        return {"connected": True, "idn": na.idn}
+    try:
+        await asyncio.to_thread(na.connect)
+        return {"connected": True, "idn": na.idn}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Connect failed: {e}")
+
+
+@app.post("/api/disconnect")
+async def api_disconnect():
+    try:
+        await asyncio.to_thread(na.disconnect)
+        return {"connected": False}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Disconnect failed: {e}")
 
 
 app = FastAPI(title="ENA Smith Live Viewer", lifespan=lifespan)
